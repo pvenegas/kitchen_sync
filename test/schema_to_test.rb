@@ -26,9 +26,9 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     create_secondtbl
 
     expects(:schema).with().returns([{"tables" => [footbl_def, middletbl_def, secondtbl_def]}])
-    expects(:open).with("footbl").returns([[Commands::ROWS, [], []], []])
-    expects(:open).with("middletbl").returns([[Commands::ROWS, [], []], []])
-    expects(:open).with("secondtbl").returns([[Commands::ROWS, [], []], []])
+    expects(:open).with("footbl").returns([[Commands::ROWS_NEXT, [], []], []])
+    expects(:open).with("middletbl").returns([[Commands::ROWS_NEXT, [], []], []])
+    expects(:open).with("secondtbl").returns([[Commands::ROWS_NEXT, [], []], []])
     expects(:quit)
     receive_commands
   end
@@ -138,8 +138,8 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     create_secondtbl
 
     expects(:schema).with().returns([{"tables" => [footbl_def, middletbl_def, secondtbl_def]}])
-    expects(:open).with("middletbl").returns([[Commands::ROWS, [], []], []])
-    expects(:open).with("secondtbl").returns([[Commands::ROWS, [], []], []])
+    expects(:open).with("middletbl").returns([[Commands::ROWS_NEXT, [], []], []])
+    expects(:open).with("secondtbl").returns([[Commands::ROWS_NEXT, [], []], []])
     expects(:quit)
     receive_commands
   end
@@ -151,8 +151,8 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     create_secondtbl
 
     expects(:schema).with().returns([{"tables" => [footbl_def, middletbl_def, secondtbl_def]}])
-    expects(:open).with("footbl").returns([[Commands::ROWS, [], []], []])
-    expects(:open).with("secondtbl").returns([[Commands::ROWS, [], []], []])
+    expects(:open).with("footbl").returns([[Commands::ROWS_NEXT, [], []], []])
+    expects(:open).with("secondtbl").returns([[Commands::ROWS_NEXT, [], []], []])
     expects(:quit)
     receive_commands
   end
@@ -164,8 +164,8 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     create_middletbl
 
     expects(:schema).with().returns([{"tables" => [footbl_def, middletbl_def, secondtbl_def]}])
-    expects(:open).with("footbl").returns([[Commands::ROWS, [], []], []])
-    expects(:open).with("middletbl").returns([[Commands::ROWS, [], []], []])
+    expects(:open).with("footbl").returns([[Commands::ROWS_NEXT, [], []], []])
+    expects(:open).with("middletbl").returns([[Commands::ROWS_NEXT, [], []], []])
     expects(:quit)
     receive_commands
   end
@@ -178,8 +178,8 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     create_secondtbl
 
     expects(:schema).with().returns([{"tables" => [middletbl_def, secondtbl_def]}])
-    expects(:open).with("middletbl").returns([[Commands::ROWS, [], []], []])
-    expects(:open).with("secondtbl").returns([[Commands::ROWS, [], []], []])
+    expects(:open).with("middletbl").returns([[Commands::ROWS_NEXT, [], []], []])
+    expects(:open).with("secondtbl").returns([[Commands::ROWS_NEXT, [], []], []])
     expects(:quit)
     receive_commands
   end
@@ -192,8 +192,8 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     create_secondtbl
 
     expects(:schema).with().returns([{"tables" => [footbl_def, secondtbl_def]}])
-    expects(:open).with("footbl").returns([[Commands::ROWS, [], []], []])
-    expects(:open).with("secondtbl").returns([[Commands::ROWS, [], []], []])
+    expects(:open).with("footbl").returns([[Commands::ROWS_NEXT, [], []], []])
+    expects(:open).with("secondtbl").returns([[Commands::ROWS_NEXT, [], []], []])
     expects(:quit)
     receive_commands
   end
@@ -206,8 +206,8 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     create_secondtbl
 
     expects(:schema).with().returns([{"tables" => [footbl_def, middletbl_def]}])
-    expects(:open).with("footbl").returns([[Commands::ROWS, [], []], []])
-    expects(:open).with("middletbl").returns([[Commands::ROWS, [], []], []])
+    expects(:open).with("footbl").returns([[Commands::ROWS_NEXT, [], []], []])
+    expects(:open).with("middletbl").returns([[Commands::ROWS_NEXT, [], []], []])
     expects(:quit)
     receive_commands
   end

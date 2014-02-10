@@ -18,6 +18,8 @@ struct SyncFromWorker {
 		negotiate_protocol_version();
 
 		string current_table_name;
+		ColumnValues prev_key;
+		ColumnValues last_key;
 
 		try {
 			Command command;
@@ -27,19 +29,26 @@ struct SyncFromWorker {
 
 				if (command.verb == Commands::OPEN) {
 					current_table_name = command.argument<string>(0);
-					handle_open_command(current_table_name);
+					handle_open_command(current_table_name, prev_key, last_key);
 
-				} else if (command.verb == Commands::HASH) {
-					if (current_table_name.empty()) throw command_error("Expected a table command before hash command");
-					ColumnValues prev_key(command.argument<ColumnValues>(0));
-					ColumnValues last_key(command.argument<ColumnValues>(1));
-					string           hash(command.argument<string>(2));
+				} else if (command.verb == Commands::HASH_CURR) {
+					last_key = command.argument<ColumnValues>(0);
+					string hash = command.argument<string>(1);
 					handle_hash_command(current_table_name, prev_key, last_key, hash);
 
-				} else if (command.verb == Commands::ROWS) {
-					if (current_table_name.empty()) throw command_error("Expected a table command before rows command");
-					ColumnValues prev_key(command.argument<ColumnValues>(0));
-					ColumnValues last_key(command.argument<ColumnValues>(1));
+				} else if (command.verb == Commands::HASH_NEXT) {
+					prev_key = last_key;
+					last_key = command.argument<ColumnValues>(0);
+					string hash = command.argument<string>(1);
+					handle_hash_command(current_table_name, prev_key, last_key, hash);
+
+				} else if (command.verb == Commands::ROWS_CURR) {
+					last_key = command.argument<ColumnValues>(0);
+					handle_rows_command(current_table_name, prev_key, last_key);
+
+				} else if (command.verb == Commands::ROWS_NEXT) {
+					prev_key = last_key;
+					last_key = command.argument<ColumnValues>(0);
 					handle_rows_command(current_table_name, prev_key, last_key);
 
 				} else if (command.verb == Commands::EXPORT_SNAPSHOT) {
@@ -77,44 +86,6 @@ struct SyncFromWorker {
 		}
 	}
 
-	inline void send_hash_command(const Table &table, const ColumnValues &prev_key, const ColumnValues &last_key, const string &hash) {
-		send_command(output, Commands::HASH, prev_key, last_key, hash);
-	}
-
-	inline void send_rows_command(const Table &table, ColumnValues &prev_key, ColumnValues &last_key) {
-		send_command(output, Commands::ROWS, prev_key, last_key);
-		client.retrieve_rows(table, prev_key, last_key, row_packer);
-		row_packer.pack_end();
-
-		// if that range extended to the end of the table, we're done
-		if (last_key.empty()) return;
-
-		// and then follow up straight away with the next command
-		prev_key = last_key;
-		find_hash_of_next_range(*this, client, table, 1, prev_key, last_key);
-	}
-
-	void handle_rows_command(const string &table_name, ColumnValues &prev_key, ColumnValues &last_key) { // mutable as we allow find_hash_of_next_range to update the values; caller has no use for the original values once passed
-		const Table &table(client.table_by_name(table_name));
-
-		// send the requested rows
-		send_rows_command(table, prev_key, last_key);
-	}
-
-	void handle_open_command(const string &table_name) {
-		const Table &table(client.table_by_name(table_name));
-
-		ColumnValues prev_key;
-		ColumnValues last_key;
-		find_hash_of_next_range(*this, client, table, 1, prev_key, last_key);
-	}
-
-	void handle_hash_command(const string &table_name, ColumnValues &prev_key, ColumnValues &last_key, string &hash) { // mutable as we allow check_hash_and_choose_next_range to update the values; caller has no use for the original values once passed
-		const Table &table(client.table_by_name(table_name));
-
-		check_hash_and_choose_next_range(*this, client, table, prev_key, last_key, hash);
-	}
-
 	void negotiate_protocol_version() {
 		const int PROTOCOL_VERSION_SUPPORTED = 1;
 
@@ -131,6 +102,48 @@ struct SyncFromWorker {
 		// tell the other end what version was selected
 		output << protocol;
 		output.flush();
+	}
+
+	inline void send_hash_command(const Table &table, verb_t verb, const ColumnValues &prev_key, const ColumnValues &last_key, const string &hash) {
+		// tell the other end to check its hash of the same rows, using key ranges rather than a count to improve the chances of a match.
+		send_command(output, verb, last_key, hash);
+	}
+
+	inline void send_rows_response(const Table &table, verb_t verb, const ColumnValues &prev_key, const ColumnValues &last_key) {
+		send_command(output, verb, last_key);
+		client.retrieve_rows(table, prev_key, last_key, row_packer);
+		row_packer.pack_end();
+	}
+
+	inline void send_rows_command(const Table &table, verb_t verb, ColumnValues &prev_key, ColumnValues &last_key) {
+		// rows don't match, and there's only one or no rows in the range, so send it straight across, as if they had given the rows command
+		send_rows_response(table, verb, prev_key, last_key);
+
+		// if that range extended to the end of the table, we're done
+		if (last_key.empty()) return;
+
+		// otherwise follow up straight away with the next command
+		prev_key = last_key;
+		find_hash_of_next_range(*this, client, table, 1, prev_key, last_key, Commands::HASH_NEXT);
+	}
+
+	void handle_open_command(const string &table_name, ColumnValues &prev_key, ColumnValues &last_key) {
+		const Table &table(client.table_by_name(table_name));
+
+		prev_key = ColumnValues();
+		find_hash_of_next_range(*this, client, table, 1, prev_key, last_key, Commands::HASH_NEXT);
+	}
+
+	void handle_hash_command(const string &table_name, ColumnValues &prev_key, ColumnValues &last_key, string &hash) {
+		const Table &table(client.table_by_name(table_name));
+
+		check_hash_and_choose_next_range(*this, client, table, prev_key, last_key, hash);
+	}
+
+	void handle_rows_command(const string &table_name, ColumnValues &prev_key, ColumnValues &last_key) {
+		const Table &table(client.table_by_name(table_name));
+
+		send_rows_command(table, Commands::ROWS_CURR, prev_key, last_key);
 	}
 
 	DatabaseClient client;

@@ -28,11 +28,11 @@ void check_hash_and_choose_next_range(Worker &worker, DatabaseClient &client, co
 	if (hasher_for_their_range.finish() == hash) {
 		// match, move on to the next set of rows, and optimistically double the row count
 		prev_key = last_key;
-		find_hash_of_next_range(worker, client, table, hasher_for_their_range.row_count*2, prev_key, last_key);
+		find_hash_of_next_range(worker, client, table, hasher_for_their_range.row_count*2, prev_key, last_key, Commands::HASH_NEXT);
 
 	} else if (hasher_for_their_range.row_count > 1) {
 		// no match, try again starting at the same row for a smaller set of rows
-		find_hash_of_next_range(worker, client, table, hasher_for_their_range.row_count/2, prev_key, last_key);
+		find_hash_of_next_range(worker, client, table, hasher_for_their_range.row_count/2, prev_key, last_key, Commands::HASH_CURR);
 
 	} else {
 		// rows don't match, and there's only 0 or 1 rows in that range on our side, so it's time to send
@@ -44,12 +44,12 @@ void check_hash_and_choose_next_range(Worker &worker, DatabaseClient &client, co
 			extend_last_key(client, table, last_key);
 		}
 
-		worker.send_rows_command(table, prev_key, last_key);
+		worker.send_rows_command(table, Commands::ROWS_CURR, prev_key, last_key);
 	}
 }
 
 template <typename Worker, typename DatabaseClient>
-void find_hash_of_next_range(Worker &worker, DatabaseClient &client, const Table &table, size_t rows_to_hash, ColumnValues &prev_key, ColumnValues &last_key) {
+void find_hash_of_next_range(Worker &worker, DatabaseClient &client, const Table &table, size_t rows_to_hash, ColumnValues &prev_key, ColumnValues &last_key, verb_t hash_command) {
 	if (!rows_to_hash) throw logic_error("Can't hash 0 rows");
 	
 	RowHasherAndLastKey<typename DatabaseClient::RowType> hasher_for_our_rows(table.primary_key_columns);
@@ -59,11 +59,11 @@ void find_hash_of_next_range(Worker &worker, DatabaseClient &client, const Table
 	if (hasher_for_our_rows.row_count == 0) {
 		// we've reached the end of the table, so we just need to do a rows command for the range after the
 		// previously—matched key, to clear out any extra entries at the 'to' end
-		worker.send_rows_command(table, prev_key, last_key);
+		worker.send_rows_command(table, Commands::ROWS_NEXT, prev_key, last_key);
 	} else {
 		// found some rows, send the new key range and the new hash to the other end
 		string hash = hasher_for_our_rows.finish().to_string();
-		worker.send_hash_command(table, prev_key, last_key, hash);
+		worker.send_hash_command(table, hash_command, prev_key, last_key, hash);
 	}
 }
 

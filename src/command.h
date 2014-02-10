@@ -60,8 +60,10 @@ struct command_error: public runtime_error {
 
 namespace Commands {
 	const verb_t OPEN = 1;
-	const verb_t ROWS = 2;
-	const verb_t HASH = 3;
+	const verb_t ROWS_CURR = 2;
+	const verb_t ROWS_NEXT = 3;
+	const verb_t HASH_CURR = 4;
+	const verb_t HASH_NEXT = 5;
 
 	const verb_t PROTOCOL = 32;
 	const verb_t EXPORT_SNAPSHOT  = 33;

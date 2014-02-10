@@ -69,8 +69,10 @@ ENDPOINT_DATABASES = {
 
 module Commands
   OPEN = 1
-  ROWS = 2
-  HASH = 3
+  ROWS_CURR = 2
+  ROWS_NEXT = 3
+  HASH_CURR = 4
+  HASH_NEXT = 5
 
   PROTOCOL = 32
   EXPORT_SNAPSHOT  = 33
@@ -137,7 +139,7 @@ module KitchenSync
 
     def receive_commands(*args)
       spawner.receive_commands(*args) do |command|
-        verb = Verbs[command[0]]
+        verb = Verbs[command[0]] or raise("Unknown command #{command[0]}")
         send(verb, *command[1..-1])
       end
     end
