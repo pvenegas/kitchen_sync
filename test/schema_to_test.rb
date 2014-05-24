@@ -35,18 +35,6 @@ class SchemaToTest < KitchenSync::EndpointTestCase
   end
 
 
-  test_each "complains about an empty list of tables on a non-empty database" do
-    clear_schema
-    create_footbl
-
-    expect_handshake_commands
-    expect_command Commands::SCHEMA
-    expect_stderr("Extra table footbl") do
-      send_command Commands::SCHEMA, "tables" => []
-      read_command rescue nil      
-    end
-  end
-
   test_each "complains about a non-empty list of tables on an empty database" do
     clear_schema
 
@@ -56,6 +44,17 @@ class SchemaToTest < KitchenSync::EndpointTestCase
       send_command Commands::SCHEMA, "tables" => [footbl_def]
       read_command rescue nil      
     end
+  end
+
+  test_each "drops tables to match an empty list of tables on a non-empty database" do
+    clear_schema
+    create_footbl
+
+    expect_handshake_commands
+    expect_command Commands::SCHEMA
+    send_command Commands::SCHEMA, "tables" => []
+    read_command
+    assert_equal %w(), connection.tables
   end
 
   test_each "complains about a missing table before other tables" do
@@ -97,7 +96,7 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     end
   end
 
-  test_each "complains about extra tables before other tables" do
+  test_each "drops extra tables before other tables" do
     clear_schema
     create_footbl
     create_middletbl
@@ -105,13 +104,12 @@ class SchemaToTest < KitchenSync::EndpointTestCase
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Extra table footbl") do
-      send_command Commands::SCHEMA, "tables" => [middletbl_def, secondtbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [middletbl_def, secondtbl_def]
+    read_command
+    assert_equal %w(middletbl secondtbl), connection.tables
   end
 
-  test_each "complains about extra tables between other tables" do
+  test_each "drops extra tables between other tables" do
     clear_schema
     create_footbl
     create_middletbl
@@ -119,13 +117,12 @@ class SchemaToTest < KitchenSync::EndpointTestCase
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Extra table middletbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def, secondtbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def, secondtbl_def]
+    read_command
+    assert_equal %w(footbl secondtbl), connection.tables
   end
 
-  test_each "complains about extra tables after other tables" do
+  test_each "drops extra tables after other tables" do
     clear_schema
     create_footbl
     create_middletbl
@@ -133,10 +130,9 @@ class SchemaToTest < KitchenSync::EndpointTestCase
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Extra table secondtbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def]
+    read_command
+    assert_equal %w(footbl middletbl), connection.tables
   end
 
 
@@ -153,7 +149,7 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     send_command   Commands::ROWS, [], []
     expect_command Commands::OPEN, ["secondtbl"]
     send_command   Commands::ROWS, [], []
-    read_command rescue nil
+    read_command
   end
 
   test_each "doesn't complain about a missing table between other tables if told to ignore the table" do
@@ -169,7 +165,7 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     send_command   Commands::ROWS, [], []
     expect_command Commands::OPEN, ["secondtbl"]
     send_command   Commands::ROWS, [], []
-    read_command rescue nil
+    read_command
   end
 
   test_each "doesn't complain about a missing table after other tables if told to ignore the table" do
@@ -185,7 +181,7 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     send_command   Commands::ROWS, [], []
     expect_command Commands::OPEN, ["middletbl"]
     send_command   Commands::ROWS, [], []
-    read_command rescue nil
+    read_command
   end
 
   test_each "doesn't complain about extra tables before other tables if told to ignore the table" do
@@ -202,7 +198,7 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     send_command   Commands::ROWS, [], []
     expect_command Commands::OPEN, ["secondtbl"]
     send_command   Commands::ROWS, [], []
-    read_command rescue nil
+    read_command
   end
 
   test_each "doesn't complain about extra tables between other tables if told to ignore the table" do
@@ -219,7 +215,7 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     send_command   Commands::ROWS, [], []
     expect_command Commands::OPEN, ["secondtbl"]
     send_command   Commands::ROWS, [], []
-    read_command rescue nil
+    read_command
   end
 
   test_each "doesn't complain about extra tables after other tables if told to ignore the table" do
@@ -236,7 +232,7 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     send_command   Commands::ROWS, [], []
     expect_command Commands::OPEN, ["middletbl"]
     send_command   Commands::ROWS, [], []
-    read_command rescue nil
+    read_command
   end
 
 
@@ -279,43 +275,43 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     end
   end
 
-  test_each "complains about extra columns before other columns" do
+  test_each "drops extra columns before other columns" do
     clear_schema
     create_footbl
     # postgresql doesn't support BEFORE/AFTER so we do this test by changing the expected schema instead
 
+    columns = footbl_def["columns"][1..-1]
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Extra column col1 on table footbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def.merge("columns" => footbl_def["columns"][1..-1])]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def.merge("columns" => columns)]
+    read_command
+    assert_equal columns.collect {|column| column["name"]}, connection.table_column_names("footbl")
   end
 
-  test_each "complains about extra columns between other columns" do
+  test_each "drops extra columns between other columns" do
     clear_schema
     create_footbl
     # postgresql doesn't support BEFORE/AFTER so we do this test by changing the expected schema instead
 
+    columns = footbl_def["columns"][0..0] + footbl_def["columns"][2..-1]
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Extra column another_col on table footbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def.merge("columns" => footbl_def["columns"][0..0] + footbl_def["columns"][2..-1])]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def.merge("columns" => columns)]
+    read_command
+    assert_equal columns.collect {|column| column["name"]}, connection.table_column_names("footbl")
   end
 
-  test_each "complains about extra columns after other columns" do
+  test_each "drops extra columns after other columns" do
     clear_schema
     create_footbl
     # postgresql doesn't support BEFORE/AFTER so we do this test by changing the expected schema instead
 
+    columns = footbl_def["columns"][0..-2]
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Extra column col3 on table footbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def.merge("columns" => footbl_def["columns"][0..-2])]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def.merge("columns" => columns)]
+    read_command
+    assert_equal columns.collect {|column| column["name"]}, connection.table_column_names("footbl")
   end
 
   test_each "complains about misordered columns" do
@@ -396,17 +392,16 @@ class SchemaToTest < KitchenSync::EndpointTestCase
   end
 
 
-  test_each "complains about extra keys" do
+  test_each "drops extra keys" do
     clear_schema
     create_secondtbl
     execute "CREATE INDEX extrakey ON secondtbl (sec, tri)"
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Extra key extrakey on table secondtbl") do
-      send_command Commands::SCHEMA, "tables" => [secondtbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [secondtbl_def]
+    read_command
+    assert_equal secondtbl_def["keys"].collect {|key| key["name"]}, connection.table_keys("secondtbl")
   end
 
   test_each "complains about missing keys" do

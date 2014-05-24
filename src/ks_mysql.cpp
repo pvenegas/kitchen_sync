@@ -144,6 +144,7 @@ public:
 	string escape_value(const string &value);
 
 	inline char quote_identifiers_with() const { return '`'; }
+	inline bool index_names_are_global() const { return false; }
 
 protected:
 	friend class MySQLTableLister;

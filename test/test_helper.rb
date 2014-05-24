@@ -40,7 +40,31 @@ class PGconn
   end
 
   def tables
-    query("SELECT tablename FROM pg_tables WHERE schemaname = ANY (current_schemas(false))").collect {|row| row["tablename"]}
+    query("SELECT tablename FROM pg_tables WHERE schemaname = ANY (current_schemas(false)) ORDER BY tablename").collect {|row| row["tablename"]}
+  end
+
+  def table_keys(table_name)
+    query(<<-SQL).collect {|row| row["relname"]}
+      SELECT index_class.relname
+        FROM pg_class table_class, pg_index, pg_class index_class
+       WHERE table_class.relname = '#{table_name}' AND
+             table_class.oid = pg_index.indrelid AND
+             index_class.oid = pg_index.indexrelid AND
+             index_class.relkind = 'i' AND
+             NOT pg_index.indisprimary
+    SQL
+  end
+
+  def table_column_names(table_name)
+    query(<<-SQL).collect {|row| row["attname"]}
+      SELECT attname
+        FROM pg_attribute, pg_class
+       WHERE attrelid = pg_class.oid AND
+             attnum > 0 AND
+             NOT attisdropped AND
+             relname = '#{table_name}'
+       ORDER BY attnum
+    SQL
   end
 
   def quote_ident(name)
@@ -55,6 +79,14 @@ class Mysql2::Client
 
   def tables
     query("SHOW TABLES").collect {|row| row.values.first}
+  end
+
+  def table_keys(table_name)
+    query("SHOW KEYS FROM #{table_name}").collect {|row| row.values[2] unless row.values[2] == "PRIMARY"}.compact
+  end
+
+  def table_column_names(table_name)
+    query("SHOW COLUMNS FROM #{table_name}").collect {|row| row.values.first}.compact
   end
 
   def quote_ident(name)

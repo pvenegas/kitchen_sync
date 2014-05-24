@@ -160,7 +160,8 @@ struct SyncToWorker {
 			filter_tables(to_database.tables);
 
 			// check they match
-			match_schemas(database, to_database);
+			SchemaMatcher<DatabaseClient> matcher(client);
+			matcher.match_schemas(database, to_database);
 		}
 	}
 

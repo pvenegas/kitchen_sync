@@ -113,4 +113,35 @@ string count_rows_sql(DatabaseClient &client, const Table &table, const ColumnVa
 	return result;
 }
 
+template <typename DatabaseClient>
+string drop_table_sql(DatabaseClient &client, const Table &table) {
+	return "DROP TABLE " + table.name;
+}
+
+template <typename DatabaseClient>
+string drop_key_sql(DatabaseClient &client, const Table &table, const Key &key) {
+	string result;
+	if (!client.index_names_are_global()) {
+		result += "ALTER TABLE ";
+		result += table.name;
+		result += ' ';
+	}
+	result += "DROP INDEX ";
+	result += key.name;
+	return result;
+}
+
+template <typename DatabaseClient>
+string drop_columns_sql(DatabaseClient &client, const Table &table, const Columns &columns) {
+	string result("ALTER TABLE ");
+	result += table.name;
+	for (Columns::const_iterator column = columns.begin(); column != columns.end(); ++column) {
+		result += (column == columns.begin() ? " DROP COLUMN " : ", DROP COLUMN ");
+		if (client.quote_identifiers_with()) result += client.quote_identifiers_with();
+		result += column->name;
+		if (client.quote_identifiers_with()) result += client.quote_identifiers_with();
+	}
+	return result;
+}
+
 #endif
