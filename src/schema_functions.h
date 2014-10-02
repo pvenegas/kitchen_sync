@@ -91,7 +91,7 @@ protected:
 		sort(  to_keys.begin(),   to_keys.end());
 
 		Keys::const_iterator from_key = from_keys.begin();
-		Keys::const_iterator   to_key =   to_keys.begin();
+		Keys::iterator         to_key =   to_keys.begin();
 		while (to_key != to_keys.end()) {
 			if (from_key == from_keys.end() ||
 				from_key->name > to_key->name) {
@@ -101,7 +101,11 @@ protected:
 				// keep the current from_key and re-evaluate on the next iteration
 
 			} else if (to_key->name > from_key->name) {
-				throw schema_mismatch("Missing key " + from_key->name + " on table " + table.name);
+				// their end has an extra key, add it
+				statements.push_back(add_key_sql(client, table, *from_key));
+				to_key = ++to_keys.insert(to_key, *from_key);
+				++from_key;
+				// keep the current to_key and re-evaluate on the next iteration
 
 			} else {
 				check_key_match(table, *from_key, *to_key);
@@ -109,17 +113,19 @@ protected:
 				++from_key;
 			}
 		}
-		if (from_key != from_keys.end()) {
-			throw schema_mismatch("Missing key " + from_key->name + " on table " + table.name);
+		while (from_key != from_keys.end()) {
+			statements.push_back(add_key_sql(client, table, *from_key));
+			to_key = ++to_keys.insert(to_key, *from_key);
+			++from_key;
 		}
 	}
 
 	void check_key_match(const Table &table, const Key &from_key, const Key &to_key) {
-		if (from_key.unique != to_key.unique) {
-			throw schema_mismatch("Mismatching unique flag on table " + table.name + " key " + from_key.name);
-		}
-		if (from_key.columns != to_key.columns) {
-			throw schema_mismatch("Mismatching columns " + unquoted_column_names_list(table.columns, to_key.columns) + " on table " + table.name + " key " + from_key.name + ", should have " + unquoted_column_names_list(table.columns, from_key.columns));
+		if (from_key.unique != to_key.unique ||
+			from_key.columns != to_key.columns) {
+			// recreate the index.  not all databases can combine these two statements, so we implement the general case only for now.
+			statements.push_back(drop_key_sql(client, table, to_key));
+			statements.push_back(add_key_sql(client, table, from_key));
 		}
 	}
 

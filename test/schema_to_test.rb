@@ -404,39 +404,41 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     assert_equal secondtbl_def["keys"].collect {|key| key["name"]}, connection.table_keys("secondtbl")
   end
 
-  test_each "complains about missing keys" do
+  test_each "adds missing keys" do
     clear_schema
     create_secondtbl
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Missing key missingkey on table secondtbl") do
-      send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("keys" => secondtbl_def["keys"] + [secondtbl_def["keys"][0].merge("name" => "missingkey")])]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("keys" => secondtbl_def["keys"] + [secondtbl_def["keys"].first.merge("name" => "missingkey")])]
+    read_command
+    assert_equal %w(missingkey) + secondtbl_def["keys"].collect {|key| key["name"]}, connection.table_keys("secondtbl").sort
+    assert !connection.table_keys_unique("secondtbl")["missingkey"], "missingkey index should not be unique"
   end
 
-  test_each "complains about keys whose unique flag doesn't match" do
+  test_each "changes keys whose unique flag doesn't match" do
     clear_schema
     create_secondtbl
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Mismatching unique flag on table secondtbl key secidx") do
-      send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("keys" => [secondtbl_def["keys"][0].merge("unique" => true)])]
-      read_command rescue nil      
-    end
+    key = secondtbl_def["keys"].first
+    assert !connection.table_keys_unique("secondtbl")[key["name"]], "missingkey index should not be unique before test"
+    send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("keys" => [key.merge("unique" => true)])]
+    read_command
+    assert connection.table_keys_unique("secondtbl")[key["name"]], "missingkey index should be unique"
   end
 
-  test_each "complains about about column list differences on keys" do
+  test_each "changes keys whose column list doesn't match" do
     clear_schema
     create_secondtbl
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Mismatching columns (sec) on table secondtbl key secidx, should have (sec, pri1)") do
-      send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("keys" => [secondtbl_def["keys"][0].merge("columns" => [3, 1])])]
-      read_command rescue nil      
-    end
+    key = secondtbl_def["keys"].first
+    assert_not_equal [secondtbl_def["columns"][3]["name"], secondtbl_def["columns"][1]["name"]], connection.table_key_columns("secondtbl")[key["name"]]
+    send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("keys" => [key.merge("columns" => [3, 1])])]
+    read_command
+    assert_equal [secondtbl_def["columns"][3]["name"], secondtbl_def["columns"][1]["name"]], connection.table_key_columns("secondtbl")[key["name"]]
   end
 end

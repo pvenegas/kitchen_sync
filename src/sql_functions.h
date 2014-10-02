@@ -127,7 +127,23 @@ string drop_key_sql(DatabaseClient &client, const Table &table, const Key &key) 
 		result += ' ';
 	}
 	result += "DROP INDEX ";
+	result += client.quote_identifiers_with();
 	result += key.name;
+	result += client.quote_identifiers_with();
+	return result;
+}
+
+template <typename DatabaseClient>
+string add_key_sql(DatabaseClient &client, const Table &table, const Key &key) {
+	string result;
+	result += key.unique ? "CREATE UNIQUE INDEX " : "CREATE INDEX ";
+	result += client.quote_identifiers_with();
+	result += key.name;
+	result += client.quote_identifiers_with();
+	result += " ON ";
+	result += table.name;
+	result += ' ';
+	result += columns_list(client, table.columns, key.columns);
 	return result;
 }
 
@@ -137,9 +153,9 @@ string drop_columns_sql(DatabaseClient &client, const Table &table, const Column
 	result += table.name;
 	for (Columns::const_iterator column = columns.begin(); column != columns.end(); ++column) {
 		result += (column == columns.begin() ? " DROP COLUMN " : ", DROP COLUMN ");
-		if (client.quote_identifiers_with()) result += client.quote_identifiers_with();
+		result += client.quote_identifiers_with();
 		result += column->name;
-		if (client.quote_identifiers_with()) result += client.quote_identifiers_with();
+		result += client.quote_identifiers_with();
 	}
 	return result;
 }

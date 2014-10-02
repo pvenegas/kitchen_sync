@@ -55,6 +55,32 @@ class PGconn
     SQL
   end
 
+  def table_keys_unique(table_name)
+    query(<<-SQL).each_with_object({}) {|row, results| results[row["relname"]] = row["indisunique"]}
+      SELECT index_class.relname, indisunique
+        FROM pg_class table_class, pg_index, pg_class index_class
+       WHERE table_class.relname = '#{table_name}' AND
+             table_class.oid = pg_index.indrelid AND
+             index_class.oid = pg_index.indexrelid AND
+             index_class.relkind = 'i' AND
+             NOT pg_index.indisprimary
+    SQL
+  end
+
+  def table_key_columns(table_name)
+    query(<<-SQL).each_with_object({}) {|row, results| (results[row["relname"]] ||= []) << row["attname"]}
+      SELECT index_class.relname, attname
+        FROM pg_class table_class, pg_index, pg_class index_class, generate_subscripts(indkey, 1) AS position, pg_attribute
+       WHERE table_class.relname = '#{table_name}' AND
+             table_class.oid = pg_index.indrelid AND
+             index_class.oid = pg_index.indexrelid AND
+             index_class.relkind = 'i' AND
+             table_class.oid = pg_attribute.attrelid AND
+             pg_attribute.attnum = indkey[position]
+       ORDER BY position
+    SQL
+  end
+
   def table_column_names(table_name)
     query(<<-SQL).collect {|row| row["attname"]}
       SELECT attname
@@ -82,7 +108,15 @@ class Mysql2::Client
   end
 
   def table_keys(table_name)
-    query("SHOW KEYS FROM #{table_name}").collect {|row| row.values[2] unless row.values[2] == "PRIMARY"}.compact
+    query("SHOW KEYS FROM #{table_name}").collect {|row| row["Key_name"] unless row["Key_name"] == "PRIMARY"}.compact
+  end
+
+  def table_keys_unique(table_name)
+    query("SHOW KEYS FROM #{table_name}").each_with_object({}) {|row, results| results[row["Key_name"]] = row["Non_unique"].zero? unless row["Key_name"] == "PRIMARY"}
+  end
+
+  def table_key_columns(table_name)
+    query("SHOW KEYS FROM #{table_name}").each_with_object({}) {|row, results| (results[row["Key_name"]] ||= []) << row["Column_name"]}
   end
 
   def table_column_names(table_name)
