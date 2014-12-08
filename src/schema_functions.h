@@ -34,6 +34,15 @@ struct name_is {
 	}
 };
 
+struct key_column_matches {
+	const Columns &columns1;
+	const Columns &columns2;
+	key_column_matches(const Columns &columns1, const Columns &columns2): columns1(columns1), columns2(columns2) {}
+	bool operator()(size_t index1, size_t index2) const {
+		return (columns1[index1] == columns2[index2]);
+	}
+};
+
 struct schema_mismatch: public runtime_error {
 	schema_mismatch(const string &error): runtime_error(error) { }
 };
@@ -68,6 +77,13 @@ protected:
 				to_table = ++to_tables.insert(to_table, *from_table);
 				++from_table;
 
+			} else if (must_recreate_table(*from_table, *to_table)) {
+				queue_drop_table(to_table->name);
+				queue_create_table(*from_table);
+				*to_table = *from_table;
+				++to_table;
+				++from_table;
+
 			} else {
 				match_table(*from_table, *to_table);
 				++to_table;
@@ -81,9 +97,25 @@ protected:
 		}
 	}
 
+	bool must_recreate_table(const Table &from_table, const Table &to_table) {
+		// if any of the primary key columns have changed, we recreate the table, because different
+		// database servers behave quite differently when we try to alter the primary key columns;
+		// since it is very rare for PKs to change, it isn't worth the complexity that would be
+		// introduced if we tried to fix things up in-place and predict/remedy all those cases.
+		return !primary_key_matches(from_table, to_table);
+	}
+
+	bool primary_key_matches(const Table &from_table, const Table &to_table) {
+		return (from_table.primary_key_columns.size() == to_table.primary_key_columns.size() &&
+				mismatch(from_table.primary_key_columns.begin(),
+						 from_table.primary_key_columns.end(),
+						 to_table.primary_key_columns.begin(),
+						 key_column_matches(from_table.columns, to_table.columns)).
+					first == from_table.primary_key_columns.end());
+	}
+
 	void match_table(Table &from_table, Table &to_table) {
 		check_columns_match(from_table, from_table.columns, to_table.columns);
-		check_primary_key_matches(from_table, from_table.primary_key_columns, to_table.primary_key_columns);
 		match_keys(from_table, from_table.keys, to_table.keys);
 		// FUTURE: check collation etc.
 	}
@@ -130,12 +162,6 @@ protected:
 			// recreate the index.  not all databases can combine these two statements, so we implement the general case only for now.
 			queue_drop_key(table, to_key);
 			queue_add_key(table, from_key);
-		}
-	}
-
-	void check_primary_key_matches(const Table &table, const ColumnIndices &from_primary_key_columns, const ColumnIndices &to_primary_key_columns) {
-		if (from_primary_key_columns != to_primary_key_columns) {
-			throw schema_mismatch("Mismatching primary key " + unquoted_column_names_list(table.columns, to_primary_key_columns) + " on table " + table.name + ", should have " + unquoted_column_names_list(table.columns, from_primary_key_columns));
 		}
 	}
 

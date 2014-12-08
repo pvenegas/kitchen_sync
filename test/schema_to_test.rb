@@ -351,40 +351,43 @@ class SchemaToTest < KitchenSync::EndpointTestCase
   end
 
 
-  test_each "complains if the primary key column order doesn't match" do
+  test_each "recreates the table if the primary key column order doesn't match" do
     clear_schema
     create_secondtbl
+    execute "INSERT INTO secondtbl VALUES (2, 2349174, 'xy', 1)"
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Mismatching primary key (pri2, pri1) on table secondtbl, should have (pri1, pri2)") do
-      send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("primary_key_columns" => [1, 2])]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("primary_key_columns" => [1, 2])]
+    read_command
+    assert_equal [1, 2].collect {|index| secondtbl_def["columns"][index]["name"]}, connection.table_key_columns("secondtbl")[connection.table_primary_key_name("secondtbl")]
+    assert_equal [], query("SELECT * FROM secondtbl")
   end
 
-  test_each "complains if there are extra primary key columns after the matching part" do
+  test_each "recreates the table if there are extra primary key columns after the matching part" do
     clear_schema
     create_secondtbl
+    execute "INSERT INTO secondtbl VALUES (2, 2349174, 'xy', 1)"
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Mismatching primary key (pri2, pri1) on table secondtbl, should have (pri2, pri1, sec)") do
-      send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("primary_key_columns" => [2, 1, 3])]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("primary_key_columns" => [2, 1, 3])]
+    read_command
+    assert_equal [2, 1, 3].collect {|index| secondtbl_def["columns"][index]["name"]}, connection.table_key_columns("secondtbl")[connection.table_primary_key_name("secondtbl")]
+    assert_equal [], query("SELECT * FROM secondtbl")
   end
 
-  test_each "complains if there are extra primary key columns before the matching part" do
+  test_each "recreates the table if there are extra primary key columns before the matching part" do
     clear_schema
     create_secondtbl
+    execute "INSERT INTO secondtbl VALUES (2, 2349174, 'xy', 1)"
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Mismatching primary key (pri2, pri1) on table secondtbl, should have (sec, pri2, pri1)") do
-      send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("primary_key_columns" => [3, 2, 1])]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [secondtbl_def.merge("primary_key_columns" => [3, 2, 1])]
+    read_command
+    assert_equal [3, 2, 1].collect {|index| secondtbl_def["columns"][index]["name"]}, connection.table_key_columns("secondtbl")[connection.table_primary_key_name("secondtbl")]
+    assert_equal [], query("SELECT * FROM secondtbl")
   end
 
 

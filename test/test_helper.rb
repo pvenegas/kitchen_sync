@@ -43,6 +43,10 @@ class PGconn
     query("SELECT tablename FROM pg_tables WHERE schemaname = ANY (current_schemas(false)) ORDER BY tablename").collect {|row| row["tablename"]}
   end
 
+  def table_primary_key_name(table_name)
+    "#{table_name}_pkey"
+  end
+
   def table_keys(table_name)
     query(<<-SQL).collect {|row| row["relname"]}
       SELECT index_class.relname
@@ -105,6 +109,10 @@ class Mysql2::Client
 
   def tables
     query("SHOW TABLES").collect {|row| row.values.first}
+  end
+
+  def table_primary_key_name(table_name)
+    "PRIMARY"
   end
 
   def table_keys(table_name)

@@ -41,6 +41,9 @@ struct Column {
 
 	inline Column(const string &name, bool nullable, bool default_set, string default_value, string column_type, size_t size = 0, size_t scale = 0): name(name), nullable(nullable), default_set(default_set), default_value(default_value), column_type(column_type), size(size), scale(scale) {}
 	inline Column(): size(0), scale(0), nullable(true), default_set(false) {}
+
+	// ignore filter_expression for comparisons, compare all the other fields
+	inline bool operator==(const Column &other) const { return (name == other.name && nullable == other.nullable && column_type == other.column_type && size == other.size && scale == other.scale && default_set == other.default_set && default_value == other.default_value); }
 };
 
 typedef vector<Column> Columns;
