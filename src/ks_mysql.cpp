@@ -142,6 +142,7 @@ public:
 	void rollback_transaction();
 	void populate_database_schema(Database &database);
 	string escape_value(const string &value);
+	string column_definition(const Column &column);
 
 	inline char quote_identifiers_with() const { return '`'; }
 	inline bool index_names_are_global() const { return false; }
@@ -288,6 +289,123 @@ string MySQLClient::escape_value(const string &value) {
 	result.resize(value.size()*2 + 1);
 	size_t result_length = mysql_real_escape_string(&mysql, (char*)result.data(), value.c_str(), value.size());
 	result.resize(result_length);
+	return result;
+}
+
+string MySQLClient::column_definition(const Column &column) {
+	string result;
+	result += quote_identifiers_with();
+	result += column.name;
+	result += quote_identifiers_with();
+	result += ' ';
+
+	if (column.column_type == ColumnTypes::BLOB) {
+		switch (column.size) {
+			case 1:
+				result += "tinyblob";
+				break;
+
+			case 2:
+				result += "blob";
+				break;
+
+			case 3:
+				result += "mediumblob";
+				break;
+
+			default:
+				result += "longblob";
+		}
+
+	} else if (column.column_type == ColumnTypes::TEXT) {
+		switch (column.size) {
+			case 1:
+				result += "tinytext";
+				break;
+
+			case 2:
+				result += "text";
+				break;
+
+			case 3:
+				result += "mediumtext";
+				break;
+
+			default:
+				result += "longtext";
+		}
+
+	} else if (column.column_type == ColumnTypes::VCHR) {
+		result += "varchar(";
+		result += to_string(column.size);
+		result += ")";
+
+	} else if (column.column_type == ColumnTypes::FCHR) {
+		result += "char(";
+		result += to_string(column.size);
+		result += ")";
+
+	} else if (column.column_type == ColumnTypes::BOOL) {
+		result += "tinyint(1)";
+
+	} else if (column.column_type == ColumnTypes::SINT || column.column_type == ColumnTypes::UINT) {
+		switch (column.size) {
+			case 1:
+				result += "tinyint";
+				break;
+
+			case 2:
+				result += "smallint";
+				break;
+
+			case 3:
+				result += "mediumint";
+				break;
+
+			case 4:
+				result += "int";
+				break;
+
+			default:
+				result += "bigint";
+		}
+
+		if (column.column_type == ColumnTypes::UINT) {
+			result += " unsigned";
+		}
+
+	} else if (column.column_type == ColumnTypes::REAL) {
+		result += (column.size == 4 ? "float" : "double");
+
+	} else if (column.column_type == ColumnTypes::DECI) {
+		result += "decimal(";
+		result += to_string(column.size);
+		result += ',';
+		result += to_string(column.scale);
+		result += ')';
+
+	} else if (column.column_type == ColumnTypes::DATE) {
+		result += "date";
+
+	} else if (column.column_type == ColumnTypes::TIME) {
+		result += "time";
+
+	} else if (column.column_type == ColumnTypes::DTTM) {
+		result += "datetime";
+
+	} else {
+		throw runtime_error("Don't know how to express mysql column type of " + column.name + " (" + column.column_type + ")");
+	}
+
+	if (!column.nullable) {
+		result += " NOT NULL";
+	}
+
+	if (column.default_set) {
+		result += " DEFAULT ";
+		result += escape_value(column.default_value);
+	}
+
 	return result;
 }
 

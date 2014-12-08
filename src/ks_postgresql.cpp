@@ -152,6 +152,7 @@ public:
 	void rollback_transaction();
 	void populate_database_schema(Database &database);
 	string escape_value(const string &value);
+	string column_definition(const Column &column);
 
 	inline char quote_identifiers_with() const { return '"'; }
 	inline bool index_names_are_global() const { return true; }
@@ -287,6 +288,86 @@ string PostgreSQLClient::escape_value(const string &value) {
 	result.resize(value.size()*2 + 1);
 	size_t result_length = PQescapeStringConn(conn, (char*)result.data(), value.c_str(), value.size(), nullptr);
 	result.resize(result_length);
+	return result;
+}
+
+string PostgreSQLClient::column_definition(const Column &column) {
+	string result;
+	result += quote_identifiers_with();
+	result += column.name;
+	result += quote_identifiers_with();
+	result += ' ';
+
+	if (column.column_type == ColumnTypes::BLOB) {
+		result += "bytea";
+
+	} else if (column.column_type == ColumnTypes::TEXT) {
+		result += "text";
+
+	} else if (column.column_type == ColumnTypes::VCHR) {
+		result += "character varying(";
+		result += to_string(column.size);
+		result += ")";
+
+	} else if (column.column_type == ColumnTypes::FCHR) {
+		result += "character(";
+		result += to_string(column.size);
+		result += ")";
+
+	} else if (column.column_type == ColumnTypes::BOOL) {
+		result += "boolean";
+
+	} else if (column.column_type == ColumnTypes::SINT || column.column_type == ColumnTypes::UINT) {
+		switch (column.size) {
+			case 1: // not used by postgresql; smallint is the nearest equivalent
+			case 2:
+				result += "smallint";
+				break;
+
+			case 3: // not used by postgresql; integer is the nearest equivalent
+			case 4:
+				result += "integer";
+				break;
+
+			default:
+				result += "bigint";
+		}
+
+		// postgresql doesn't support unsigned columns; to make migration from databases that do
+		// easier, we don't reject unsigned columns, we just convert them to the signed equivalent
+
+	} else if (column.column_type == ColumnTypes::REAL) {
+		result += (column.size == 4 ? "float" : "double precision");
+
+	} else if (column.column_type == ColumnTypes::DECI) {
+		result += "numeric(";
+		result += to_string(column.size);
+		result += ',';
+		result += to_string(column.scale);
+		result += ')';
+
+	} else if (column.column_type == ColumnTypes::DATE) {
+		result += "date without time zone";
+
+	} else if (column.column_type == ColumnTypes::TIME) {
+		result += "time without time zone";
+
+	} else if (column.column_type == ColumnTypes::DTTM) {
+		result += "datetime without time zone";
+
+	} else {
+		throw runtime_error("Don't know how to express postgresql column type of " + column.name + " (" + column.column_type + ")");
+	}
+
+	if (!column.nullable) {
+		result += " NOT NULL";
+	}
+
+	if (column.default_set) {
+		result += " DEFAULT ";
+		result += escape_value(column.default_value);
+	}
+
 	return result;
 }
 

@@ -114,6 +114,20 @@ string count_rows_sql(DatabaseClient &client, const Table &table, const ColumnVa
 }
 
 template <typename DatabaseClient>
+string create_table_sql(DatabaseClient &client, const Table &table) {
+	string result("CREATE TABLE ");
+	result += table.name;
+	for (Columns::const_iterator column = table.columns.begin(); column != table.columns.end(); ++column) {
+		result += (column == table.columns.begin() ? " (\n  " : ",\n");
+		result += client.column_definition(*column);
+	}
+	result += ",\n  PRIMARY KEY";
+	result += columns_list(client, table.columns, table.primary_key_columns);
+	result += ")";
+	return result;
+}
+
+template <typename DatabaseClient>
 string drop_table_sql(DatabaseClient &client, const Table &table) {
 	return "DROP TABLE " + table.name;
 }

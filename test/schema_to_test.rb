@@ -35,65 +35,50 @@ class SchemaToTest < KitchenSync::EndpointTestCase
   end
 
 
-  test_each "complains about a non-empty list of tables on an empty database" do
+  test_each "adds missing tables before other tables" do
     clear_schema
+    create_middletbl
+    create_secondtbl
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Missing table footbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def]
-      read_command rescue nil      
-    end
-  end
-
-  test_each "drops tables to match an empty list of tables on a non-empty database" do
-    clear_schema
-    create_footbl
-
-    expect_handshake_commands
-    expect_command Commands::SCHEMA
-    send_command Commands::SCHEMA, "tables" => []
+    send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def, secondtbl_def]
     read_command
-    assert_equal %w(), connection.tables
+    assert_equal %w(footbl middletbl secondtbl), connection.tables
   end
 
-  test_each "complains about a missing table before other tables" do
-    clear_schema
-    create_middletbl
-    create_secondtbl
-
-    expect_handshake_commands
-    expect_command Commands::SCHEMA
-    expect_stderr("Missing table footbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def, secondtbl_def]
-      read_command rescue nil      
-    end
-  end
-
-  test_each "complains about a missing table between other tables" do
+  test_each "adds missing tables between other tables" do
     clear_schema
     create_footbl
     create_secondtbl
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Missing table middletbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def, secondtbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def, secondtbl_def]
+    read_command
+    assert_equal %w(footbl middletbl secondtbl), connection.tables
   end
 
-  test_each "complains about a missing table after other tables" do
+  test_each "adds missing tables after other tables" do
     clear_schema
     create_footbl
     create_middletbl
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Missing table secondtbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def, secondtbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def, secondtbl_def]
+    read_command
+    assert_equal %w(footbl middletbl secondtbl), connection.tables
+  end
+
+  test_each "adds all missing tables on an empty database" do
+    clear_schema
+
+    expect_handshake_commands
+    expect_command Commands::SCHEMA
+    send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def, secondtbl_def]
+    read_command
+    assert_equal %w(footbl middletbl secondtbl), connection.tables
   end
 
   test_each "drops extra tables before other tables" do
@@ -133,6 +118,17 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     send_command Commands::SCHEMA, "tables" => [footbl_def, middletbl_def]
     read_command
     assert_equal %w(footbl middletbl), connection.tables
+  end
+
+  test_each "drops all tables to match an empty list of tables on a non-empty database" do
+    clear_schema
+    create_footbl
+
+    expect_handshake_commands
+    expect_command Commands::SCHEMA
+    send_command Commands::SCHEMA, "tables" => []
+    read_command
+    assert_equal %w(), connection.tables
   end
 
 

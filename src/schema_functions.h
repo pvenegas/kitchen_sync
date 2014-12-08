@@ -59,12 +59,14 @@ protected:
 			if (from_table == from_tables.end() ||
 				from_table->name > to_table->name) {
 				// our end has an extra table, drop it
-				statements.push_back(drop_table_sql(client, to_table->name));
+				queue_drop_table(to_table->name);
 				to_table = to_tables.erase(to_table);
 				// keep the current from_table and re-evaluate on the next iteration
 
 			} else if (to_table->name > from_table->name) {
-				throw schema_mismatch("Missing table " + from_table->name);
+				queue_create_table(*from_table);
+				to_table = ++to_tables.insert(to_table, *from_table);
+				++from_table;
 
 			} else {
 				match_table(*from_table, *to_table);
@@ -72,8 +74,10 @@ protected:
 				++from_table;
 			}
 		}
-		if (from_table != from_tables.end()) {
-			throw schema_mismatch("Missing table " + from_table->name);
+		while (from_table != from_tables.end()) {
+			queue_create_table(*from_table);
+			to_tables.push_back(*from_table);
+			++from_table;
 		}
 	}
 
@@ -96,13 +100,13 @@ protected:
 			if (from_key == from_keys.end() ||
 				from_key->name > to_key->name) {
 				// our end has an extra key, drop it
-				statements.push_back(drop_key_sql(client, table, *to_key));
+				queue_drop_key(table, *to_key);
 				to_key = to_keys.erase(to_key);
 				// keep the current from_key and re-evaluate on the next iteration
 
 			} else if (to_key->name > from_key->name) {
 				// their end has an extra key, add it
-				statements.push_back(add_key_sql(client, table, *from_key));
+				queue_add_key(table, *from_key);
 				to_key = ++to_keys.insert(to_key, *from_key);
 				++from_key;
 				// keep the current to_key and re-evaluate on the next iteration
@@ -114,7 +118,7 @@ protected:
 			}
 		}
 		while (from_key != from_keys.end()) {
-			statements.push_back(add_key_sql(client, table, *from_key));
+			queue_add_key(table, *from_key);
 			to_key = ++to_keys.insert(to_key, *from_key);
 			++from_key;
 		}
@@ -124,8 +128,8 @@ protected:
 		if (from_key.unique != to_key.unique ||
 			from_key.columns != to_key.columns) {
 			// recreate the index.  not all databases can combine these two statements, so we implement the general case only for now.
-			statements.push_back(drop_key_sql(client, table, to_key));
-			statements.push_back(add_key_sql(client, table, from_key));
+			queue_drop_key(table, to_key);
+			queue_add_key(table, from_key);
 		}
 	}
 
@@ -164,7 +168,7 @@ protected:
 			throw schema_mismatch("Missing column " + from_column->name + " on table " + table.name);
 		}
 		if (!columns_to_drop.empty()) {
-			statements.push_back(drop_columns_sql(client, table, columns_to_drop));
+			queue_drop_columns(table, columns_to_drop);
 		}
 	}
 
@@ -193,6 +197,30 @@ protected:
 		}
 	}
 
+protected:
+	void queue_create_table(const Table &table) {
+		statements.push_back(create_table_sql(client, table));
+
+		for (const Key &key : table.keys) {
+			statements.push_back(add_key_sql(client, table, key));
+		}
+	}
+
+	void queue_drop_table(const Table &table) {
+		statements.push_back(drop_table_sql(client, table));
+	}
+
+	void queue_add_key(const Table &table, const Key &key) {
+		statements.push_back(add_key_sql(client, table, key));
+	}
+
+	void queue_drop_key(const Table &table, const Key &key) {
+		statements.push_back(drop_key_sql(client, table, key));
+	}
+
+	void queue_drop_columns(const Table &table, const Columns &columns) {
+		statements.push_back(drop_columns_sql(client, table, columns));
+	}
 
 protected:
 	DatabaseClient &client;
