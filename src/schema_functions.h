@@ -106,16 +106,23 @@ protected:
 	}
 
 	bool primary_key_matches(const Table &from_table, const Table &to_table) {
+		size_t last_primary_key_column = *max_element(from_table.primary_key_columns.begin(), from_table.primary_key_columns.end());
 		return (from_table.primary_key_columns.size() == to_table.primary_key_columns.size() &&
 				mismatch(from_table.primary_key_columns.begin(),
 						 from_table.primary_key_columns.end(),
 						 to_table.primary_key_columns.begin(),
 						 key_column_matches(from_table.columns, to_table.columns)).
-					first == from_table.primary_key_columns.end());
+					first == from_table.primary_key_columns.end() &&
+				last_primary_key_column < to_table.columns.size() &&
+				mismatch(from_table.columns.begin(),
+						 from_table.columns.begin() + last_primary_key_column,
+						 to_table.columns.begin()).
+					first == from_table.columns.begin() + last_primary_key_column);
 	}
 
 	void match_table(Table &from_table, Table &to_table) {
-		check_columns_match(from_table, to_table);
+		match_columns(from_table, to_table);
+		to_table.primary_key_columns = from_table.primary_key_columns; // we checked the primary key columns themselves were the same above, but if other columns were added or removed, the column index values in primary_key_columns may have changed
 		match_keys(from_table, from_table.keys, to_table.keys);
 		// FUTURE: check collation etc.
 	}
@@ -166,8 +173,9 @@ protected:
 	}
 
 
-	void check_columns_match(const Table &from_table, Table &to_table) {
+	void match_columns(const Table &from_table, Table &to_table) {
 		Columns columns_to_drop;
+		Columns columns_to_add;
 		Columns::const_iterator from_column = from_table.columns.begin();
 		Columns::iterator         to_column =   to_table.columns.begin();
 		while (to_column != to_table.columns.end()) {
@@ -177,25 +185,22 @@ protected:
 				++to_column;
 				++from_column;
 
-			} else if (find_if(from_column, from_table.columns.end(), name_is<Column>(to_column->name)) == from_table.columns.end()) {
-				// our end has an extra column, drop it
+			} else {
+				// our end has an extra column or misordered column, drop it; if necessary it will
+				// be added back in the correct order below
 				columns_to_drop.push_back(*to_column);
 				update_keys_for_dropped_column(to_table, to_column - to_table.columns.begin());
 				to_column = to_table.columns.erase(to_column);
 				// keep the current from_column and re-evaluate on the next iteration
-
-			} else if (find_if(to_column, to_table.columns.end(), name_is<Column>(from_column->name)) == to_table.columns.end()) {
-				throw schema_mismatch("Missing column " + from_column->name + " on table " + from_table.name);
-
-			} else {
-				throw schema_mismatch("Misordered column " + from_column->name + " on table " + from_table.name + ", should have " + to_column->name + " first");
 			}
 		}
-		if (from_column != from_table.columns.end()) {
-			throw schema_mismatch("Missing column " + from_column->name + " on table " + from_table.name);
+		while (from_column != from_table.columns.end()) {
+			columns_to_add.push_back(*from_column);
+			to_table.columns.push_back(*from_column);
+			++from_column;
 		}
-		if (!columns_to_drop.empty()) {
-			queue_drop_columns(to_table, columns_to_drop);
+		if (!columns_to_drop.empty() || !columns_to_add.empty()) {
+			queue_alter_columns(to_table, columns_to_drop, columns_to_add);
 		}
 	}
 
@@ -265,8 +270,8 @@ protected:
 		statements.push_back(drop_key_sql(client, table, key));
 	}
 
-	void queue_drop_columns(const Table &table, const Columns &columns) {
-		statements.push_back(drop_columns_sql(client, table, columns));
+	void queue_alter_columns(const Table &table, const Columns &columns_to_drop, const Columns &columns_to_add) {
+		statements.push_back(alter_columns_sql(client, table, columns_to_drop, columns_to_add));
 	}
 
 protected:

@@ -162,14 +162,20 @@ string add_key_sql(DatabaseClient &client, const Table &table, const Key &key) {
 }
 
 template <typename DatabaseClient>
-string drop_columns_sql(DatabaseClient &client, const Table &table, const Columns &columns) {
+string alter_columns_sql(DatabaseClient &client, const Table &table, const Columns &columns_to_drop, const Columns &columns_to_add) {
 	string result("ALTER TABLE ");
 	result += table.name;
-	for (Columns::const_iterator column = columns.begin(); column != columns.end(); ++column) {
-		result += (column == columns.begin() ? " DROP COLUMN " : ", DROP COLUMN ");
+	for (Columns::const_iterator column = columns_to_drop.begin(); column != columns_to_drop.end(); ++column) {
+		if (column != columns_to_drop.begin()) result += ",";
+		result += " DROP COLUMN ";
 		result += client.quote_identifiers_with();
 		result += column->name;
 		result += client.quote_identifiers_with();
+	}
+	for (Columns::const_iterator column = columns_to_add.begin(); column != columns_to_add.end(); ++column) {
+		if (!columns_to_drop.empty() || column != columns_to_add.begin()) result += ",";
+		result += " ADD COLUMN ";
+		result += client.column_definition(*column);
 	}
 	return result;
 }

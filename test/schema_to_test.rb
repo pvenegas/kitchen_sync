@@ -232,43 +232,43 @@ class SchemaToTest < KitchenSync::EndpointTestCase
   end
 
 
-  test_each "complains about missing columns before other columns" do
+  test_each "adds missing columns before other columns" do
     clear_schema
     create_secondtbl
     execute("ALTER TABLE secondtbl DROP COLUMN tri")
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Missing column tri on table secondtbl") do
-      send_command Commands::SCHEMA, "tables" => [secondtbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [secondtbl_def]
+    read_command
+    assert_equal secondtbl_def["columns"].collect {|column| column["name"]}, connection.table_column_names("secondtbl")
+    # TODO: test type of columns somehow
   end
 
-  test_each "complains about missing columns between other columns" do
+  test_each "adds missing columns between other columns" do
     clear_schema
     create_footbl
     execute("ALTER TABLE footbl DROP COLUMN another_col")
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Missing column another_col on table footbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def]
+    read_command
+    assert_equal footbl_def["columns"].collect {|column| column["name"]}, connection.table_column_names("footbl")
+    # TODO: test type of columns somehow
   end
 
-  test_each "complains about missing columns after other columns" do
+  test_each "adds missing columns after other columns" do
     clear_schema
     create_footbl
     execute("ALTER TABLE footbl DROP COLUMN col3")
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Missing column col3 on table footbl") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def]
-      read_command rescue nil      
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def]
+    read_command
+    assert_equal footbl_def["columns"].collect {|column| column["name"]}, connection.table_column_names("footbl")
+    # TODO: test type of columns somehow
   end
 
   test_each "drops extra columns before other columns" do
@@ -310,17 +310,16 @@ class SchemaToTest < KitchenSync::EndpointTestCase
     assert_equal columns.collect {|column| column["name"]}, connection.table_column_names("footbl")
   end
 
-  test_each "complains about misordered columns" do
+  test_each "moves misordered columns" do
     clear_schema
     create_footbl
     # postgresql doesn't support BEFORE/AFTER so we do this test by changing the expected schema instead
 
     expect_handshake_commands
     expect_command Commands::SCHEMA
-    expect_stderr("Misordered column col3 on table footbl, should have another_col first") do
-      send_command Commands::SCHEMA, "tables" => [footbl_def.merge("columns" => footbl_def["columns"][0..0] + footbl_def["columns"][2..-1] + footbl_def["columns"][1..1])]
-      read_command rescue nil
-    end
+    send_command Commands::SCHEMA, "tables" => [footbl_def.merge("columns" => footbl_def["columns"][1..-1] + footbl_def["columns"][0..0])]
+    assert_equal footbl_def["columns"].collect {|column| column["name"]}, connection.table_column_names("footbl")
+    # TODO: test type of columns somehow
   end
 
 
