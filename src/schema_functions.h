@@ -115,7 +115,7 @@ protected:
 	}
 
 	void match_table(Table &from_table, Table &to_table) {
-		check_columns_match(from_table, from_table.columns, to_table.columns);
+		check_columns_match(from_table, to_table);
 		match_keys(from_table, from_table.keys, to_table.keys);
 		// FUTURE: check collation etc.
 	}
@@ -166,36 +166,57 @@ protected:
 	}
 
 
-	void check_columns_match(const Table &table, const Columns &from_columns, Columns &to_columns) {
+	void check_columns_match(const Table &from_table, Table &to_table) {
 		Columns columns_to_drop;
-		Columns::const_iterator from_column = from_columns.begin();
-		Columns::iterator         to_column =   to_columns.begin();
-		while (to_column != to_columns.end()) {
-			if (from_column != from_columns.end() &&
+		Columns::const_iterator from_column = from_table.columns.begin();
+		Columns::iterator         to_column =   to_table.columns.begin();
+		while (to_column != to_table.columns.end()) {
+			if (from_column != from_table.columns.end() &&
 				from_column->name == to_column->name) {
-				check_column_match(table, *from_column, *to_column);
+				check_column_match(from_table, *from_column, *to_column);
 				++to_column;
 				++from_column;
 
-			} else if (find_if(from_column, from_columns.end(), name_is<Column>(to_column->name)) == from_columns.end()) {
+			} else if (find_if(from_column, from_table.columns.end(), name_is<Column>(to_column->name)) == from_table.columns.end()) {
 				// our end has an extra column, drop it
 				columns_to_drop.push_back(*to_column);
-				to_column = to_columns.erase(to_column);
+				update_keys_for_dropped_column(to_table, to_column - to_table.columns.begin());
+				to_column = to_table.columns.erase(to_column);
 				// keep the current from_column and re-evaluate on the next iteration
 
-			} else if (find_if(to_column, to_columns.end(), name_is<Column>(from_column->name)) == to_columns.end()) {
-				throw schema_mismatch("Missing column " + from_column->name + " on table " + table.name);
+			} else if (find_if(to_column, to_table.columns.end(), name_is<Column>(from_column->name)) == to_table.columns.end()) {
+				throw schema_mismatch("Missing column " + from_column->name + " on table " + from_table.name);
 
 			} else {
-				throw schema_mismatch("Misordered column " + from_column->name + " on table " + table.name + ", should have " + to_column->name + " first");
+				throw schema_mismatch("Misordered column " + from_column->name + " on table " + from_table.name + ", should have " + to_column->name + " first");
 			}
 		}
-		if (from_column != from_columns.end()) {
-			throw schema_mismatch("Missing column " + from_column->name + " on table " + table.name);
+		if (from_column != from_table.columns.end()) {
+			throw schema_mismatch("Missing column " + from_column->name + " on table " + from_table.name);
 		}
 		if (!columns_to_drop.empty()) {
-			queue_drop_columns(table, columns_to_drop);
+			queue_drop_columns(to_table, columns_to_drop);
 		}
+	}
+
+	void update_keys_for_dropped_column(Table &table, size_t column_index) {
+		for (Keys::iterator key = table.keys.begin(); key != table.keys.end(); key = update_key_for_dropped_column(table, key, column_index)) ;
+	}
+
+	Keys::iterator update_key_for_dropped_column(Table &table, Keys::iterator key, size_t column_index) {
+		ColumnIndices::iterator column = key->columns.begin();
+		while (column != key->columns.end()) {
+			if (*column == column_index) {
+				if (client.keys_are_dropped_when_columns_are_dropped()) {
+					return table.keys.erase(key);
+				} else {
+					column = key->columns.erase(column);
+				}
+			} else if (*column > column_index) {
+				--*column;
+			}
+		}
+		return ++key;
 	}
 
 	void check_column_match(const Table &table, const Column &from_column, const Column &to_column) {

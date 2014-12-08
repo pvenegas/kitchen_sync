@@ -146,6 +146,7 @@ public:
 
 	inline char quote_identifiers_with() const { return '`'; }
 	inline bool index_names_are_global() const { return false; }
+	inline bool keys_are_dropped_when_columns_are_dropped() const { return false; }
 
 protected:
 	friend class MySQLTableLister;
